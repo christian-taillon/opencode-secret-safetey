@@ -2,6 +2,8 @@
 
 Small, auditable secret guardrails for OpenCode v2.
 
+Version 0.1.0 targets OpenCode 2.0.7 and pins `@opencode/plugin` to `2.0.7`.
+
 This plugin intentionally does only three things:
 
 1. Denies OpenCode `read` permission requests for a small set of common credential files.
@@ -34,57 +36,54 @@ Shell environments remove names matching common credential patterns such as:
 
 Known secret values of at least 8 characters are remembered in memory and replaced in completed tool results with markers such as `[REDACTED:GITHUB_TOKEN]`.
 
-## Install from Git
+## Install
 
-OpenCode v2 supports Git package plugins directly:
+Clone or pull the repository and install its one runtime dependency:
 
-```bash
-opencode plugin add git+ssh://git@github.com/christian-taillon/opencode-secret-safetey.git#main
-opencode service restart
-```
-
-Then verify that OpenCode sees the plugin:
-
-```bash
-opencode plugin list
-```
-
-## Run from a local clone
-
-Install dependencies and run the tests:
-
-```bash
+```sh
+git clone git@github.com:christian-taillon/opencode-secret-safetey.git
+cd opencode-secret-safetey
 npm install
 npm test
 ```
 
-Then add the clone to `opencode.jsonc` using an absolute path:
+If you already cloned it:
 
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": [
-    "/absolute/path/to/opencode-secret-safetey"
-  ]
-}
+```sh
+git pull
+npm install
+npm test
 ```
 
-Restart OpenCode after changing an unwatched local dependency:
-
-```bash
-opencode service restart
-```
-
-## Options
-
-Options are intentionally small and exact-match based.
+Reference the local package from your OpenCode v2 `opencode.jsonc`. An absolute path is the least ambiguous:
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "git+ssh://git@github.com/christian-taillon/opencode-secret-safetey.git#main",
+      "package": "/home/you/github/opencode-secret-safetey"
+    }
+  ]
+}
+```
+
+Restart the OpenCode service after adding or changing the local package:
+
+```sh
+opencode service restart
+```
+
+## Options
+
+Options are intentionally small and exact-match based:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    {
+      "package": "/home/you/github/opencode-secret-safetey",
       "options": {
         "allowEnv": ["MY_REQUIRED_TOKEN"],
         "denyEnv": ["CUSTOM_CREDENTIAL"],
@@ -95,47 +94,80 @@ Options are intentionally small and exact-match based.
 }
 ```
 
-- `allowEnv`: exact environment variable names that should remain available to shell processes even if they match the default credential-name rules. Their values are still eligible for output redaction.
+- `allowEnv`: exact environment variable names that remain available to shell processes even if they match the default credential-name rules. Their values remain eligible for output redaction.
 - `denyEnv`: exact additional environment variable names to remove. A deny wins if the same name appears in both lists.
 - `denyFiles`: exact additional basenames or path suffixes to deny through the OpenCode `read` permission action.
+
+## Quick manual checks
+
+After loading the plugin, try these from an OpenCode session in a disposable test project:
+
+```text
+Read .env
+```
+
+Expected: the read permission is denied.
+
+If the OpenCode service process has a disposable variable such as:
+
+```sh
+export TEST_API_KEY='secret-safety-test-12345'
+```
+
+then ask OpenCode to run:
+
+```sh
+printf '%s\n' "$TEST_API_KEY"
+```
+
+Expected: the shell receives no `TEST_API_KEY` value.
+
+To exercise exact-value output redaction separately, configure that variable in `allowEnv`. The shell may then use it, but a completed tool result containing the exact value should return `[REDACTED:TEST_API_KEY]`.
+
+Use a disposable fake credential for testing, never a real secret.
 
 ## Security boundary
 
 This plugin is designed to reduce accidental secret exposure to models. It is not a sandbox.
 
-In particular, OpenCode shell commands run with the authority of the host user. This plugin deliberately does not parse arbitrary shell commands, so a shell command can still access files that the host user can access. Protect secrets that must be inaccessible to agent-controlled code with OS, container, VM, or separate-account boundaries.
+OpenCode shell commands still run with the authority of the host user. The plugin deliberately does not parse arbitrary shell commands, so agent-controlled shell code may still access files that the host account can access through mechanisms outside OpenCode's `read` permission.
 
-The plugin also does not use heuristic content detection. Output redaction only catches exact values that it has learned from protected environment variables. This keeps the implementation predictable and minimizes false positives.
+Secrets that must be inaccessible to agent-controlled code require an OS, container, VM, or separate-account boundary.
+
+The plugin also deliberately avoids heuristic content detection. Output redaction only catches exact values learned from protected environment variables. This keeps behavior predictable and minimizes false positives.
 
 ## Design
 
-The security-sensitive implementation is split into two small files:
+The security-sensitive implementation is intentionally small:
 
-- `src/policy.js`: pure matching and redaction logic.
+- `src/policy.js`: pure filename, environment-name, and exact-value redaction logic.
 - `src/index.js`: OpenCode v2 hook registration.
+- `test/policy.test.js`: deterministic policy tests.
 
-The plugin uses current OpenCode v2 primitives:
+The adapter uses the OpenCode 2.0.7 Promise plugin contracts:
 
 - `ctx.permission.hook("evaluate", ...)`
 - `ctx.shell.hook("create.before", ...)`
 - `ctx.tool.hook("execute.after", ...)`
 
-## Test behavior
+## Test
+
+```sh
+npm test
+npm run check
+```
 
 The test suite covers:
 
 - protected and allowed filenames
 - Windows-style paths
+- custom deny filenames and path suffixes
 - default environment-name matching
 - allow and deny overrides
 - exact-value recursive redaction
 - short-value redaction avoidance
 
-Run:
-
-```bash
-npm test
-```
+GitHub Actions runs the same checks on pushes and pull requests.
 
 ## License
 
