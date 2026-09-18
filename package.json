@@ -1,0 +1,30 @@
+{
+  "name": "opencode-secret-safetey",
+  "version": "0.1.0",
+  "description": "Small, auditable secret guardrails for OpenCode v2.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/christian-taillon/opencode-secret-safetey.git"
+  },
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.0.7"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check index.js && node --check src/index.js && node --check src/policy.js && node --test"
+  }
+}
